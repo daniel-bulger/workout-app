@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package workout;
+
+// An Exercise represents something like the concept of bench pressing or squatting.
+message Exercise {
+    uint32 id = 1;
+    string name = 2;
+    string description = 3;
+    string tutorial_link = 4;
+    uint32 recommended_rep_count = 5;
+}
+
+// One who works out.
+// TODO: user authentication ?
+message User {
+    uint32 id = 1;
+    string username = 2;
+    string display_name = 3;
+    uint32 preferred_ordering_index = 4;
+}
+
+// A record of how much weight and how many reps a given user
+// did for a given excercise at some point in the past.
+message LiftRecord {
+    uint32 user_id = 1;
+    uint32 exercise_id = 2;
+    google.protobuf.Timestamp timestamp = 3;
+    double pounds = 4;
+    uint32 reps = 5;
+    LiftContext context = 6;
+    // By default, after each time a user lifts, we create a LiftRecord
+    // matching their last one with a matching LiftContext.
+    // But when someone increases their weight, they should be able to update this.
+    // This bool lets the frontend know which records to present to the user for review.
+    bool is_confirmed = 7;
+}
+
+message LiftContext {
+    uint32 workout_plan_id = 1;
+    // e.g. if lift was for the first set of a round, this is 0.
+    // Useful if you do an unequal number of reps for each set within a round.
+    uint32 set_index = 2;
+    // TODO: maybe add more context like number of people participating, time between lifts?    
+}
+
+// e.g. an 'A' day or a 'B' day.
+message WorkoutPlan {
+    uint32 id = 1;
+    string name = 2;
+    // Rounds are done in series within a workout plan.
+    repeated ExerciseRound rounds = 3;
+}
+
+message Workout {
+    uint32 id = 1;
+    uint32 plan_id = 2;
+    google.protobuf.Timestamp creation_time = 3;
+    WorkoutState state = 4;
+}
+
+message WorkoutState {
+    repeated uint32 participants = 1;
+    uint32 rounds_completed = 2;
+    // Optional -- if unset, the next round has not yet been initialized, or the workout hasn't started yet.
+    ExcerciseRoundState current_round_state = 3;
+}
+
+message ExcerciseRoundState {
+    repeated uint32 participants_left_for_excercise1 = 1;
+    repeated uint32 participants_left_for_excercise2 = 2;
+    uint32 current_set = 3;
+}
+
+// e.g. "3 sets of bench press + lunges"
+message ExerciseRound {
+    uint32 id = 1;
+    // Exercises are done in parallel within a round.
+    repeated uint32 exercise_ids = 2;
+    uint32 set_count = 3;
+}
+
+message ListInProgressWorkoutsRequest {}
+
+message ListInProgressWorkoutsResponse {
+    repeated Workout workouts = 1;
+}
+
+message CreateWorkoutRequest {
+    uint32 workout_plan_id = 1;
+}
+
+message CreateWorkoutResponse {
+    uint32 created_workout_id = 1;
+}
+
+message JoinWorkoutRequest {
+    uint32 workout_id = 1;
+    uint32 user_id = 2;
+}
+
+message JoinWorkoutResponse {}
+
+message AdvanceWorkoutRequest {
+    uint32 workout_id = 1;
+    // Must be the nonce generated from the previous AdvanceWorkout call for the given workout.
+    // Unused for the first call for a given workout.
+    uint64 nonce = 2;
+}
+
+message AdvanceWorkoutResponse {
+    // Must be passed to the next AdvanceWorkout call, to prevent multiple people from
+    // accidentally simultaneously advancing the workout twice.
+    uint64 nonce = 1;
+}
+
+message WatchRequest {
+    uint32 workout_id = 1;
+}
+
+message WorkoutUpdate {
+    uint64 nonce = 1;
+    WorkoutState new_state = 2;
+}
+
+message RecordLiftRequest {
+    LiftRecord lift_record = 1;
+}
+
+message RecordLiftResponse {}
+
+
+service WorkoutService {
+    rpc ListInProgressWorkouts(ListInProgressWorkoutsRequest) returns (ListInProgressWorkoutsResponse);
+
+    rpc CreateWorkout(CreateWorkoutRequest) returns (CreateWorkoutResponse);
+    
+    rpc JoinWorkout(JoinWorkoutRequest) returns (JoinWorkoutResponse);
+
+    rpc AdvanceWorkout(AdvanceWorkoutRequest) returns (AdvanceWorkoutResponse);
+
+    rpc Watch(WatchRequest) returns (stream WorkoutUpdate);
+
+    rpc RecordLift(RecordLiftRequest) returns (RecordLiftResponse);
+
+    // TODO add a way to see your lifting history, e.g. a graph of your weights per excercise.
+    //rpc GetLiftHistory(GetLiftHistoryRequest) returns (GetLiftHistoryResponse);
+}
